@@ -30,9 +30,13 @@ services:
       - "8000"
     networks:
       - mvp-network
+    volumes:
+      - media:/app/media
     depends_on:
       db:
         condition: service_healthy
+      celery-worker:
+        condition: service_started
     command: >
       bash -c "
       alembic upgrade head && uvicorn app.main:app --port 8000
@@ -62,10 +66,20 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: celery -A app.celery.celery_app worker
+    command: celery -A app.celery.celery_app worker -E
     networks:
       - mvp-network
     restart: unless-stopped
+  ngnix:
+    build: 
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    volumes:
+      - media:/media
+    networks:
+      - mvp-network
+    depends_on:
+      - app
   
 
 networks:
@@ -73,5 +87,5 @@ networks:
     driver: bridge
 
 volumes:
-  app:
+  media:
     driver: local

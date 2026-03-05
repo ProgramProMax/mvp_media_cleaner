@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     telegram_webhook_url: Optional[str] = None
     openai_token: Optional[str] = None
 
+    host_name: str = 'localhost'
+
     # Redis
     redis_host: str = 'redis'
     redis_port: str = '6379'

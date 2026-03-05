@@ -1,7 +1,10 @@
 from celery import Celery
 from kombu import Queue, Exchange
+from openai import OpenAI
 
 from app.core.config import settings
+
+openai = OpenAI(settings.openai_token)
 
 
 celery_app = Celery(
@@ -18,6 +21,7 @@ celery_app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     task_queues=[
+        Queue('celery', Exchange('celery'), routing_key='celery'),
         Queue('download', Exchange('download'), routing_key='download'),
         Queue('audio', Exchange('audio'), routing_key='audio'),
         Queue('transcribe', Exchange('transcribe'), routing_key='transcribe'),

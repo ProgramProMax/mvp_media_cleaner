@@ -1,11 +1,13 @@
-from fastapi import FastAPI, Request, Response, APIRouter, HTTPException
 import asyncio
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, Response, APIRouter, HTTPException
 from aiogram.types import Update
 
 from .api.routers import api_router
 from app.bot.bot import dp, set_webhook, delete_webhook, bot
 from app.core.config import settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,24 +18,10 @@ async def lifespan(app: FastAPI):
     yield
     if settings.telegram_webhook_url:
         await delete_webhook()
-    '''
-    else:
-        # no webhook configured; fall back to polling for development and
-        # local docker runs.  polling will run in a background task so that
-        # the application can continue handling HTTP requests.
-        asyncio.create_task(dp.start_polling(bot))
-    '''
 
 
 app = FastAPI(lifespan=lifespan)
 
-# --- include existing routers ------------------------------------------------
-main_router = APIRouter()
-main_router.include_router(api_router)
-app.include_router(main_router)
-
-
-# minimal router just to keep code organised
 telegram_router = APIRouter()
 
 
@@ -53,3 +41,4 @@ async def telegram_webhook(token: str, request: Request):
     return Response(status_code=200)
 
 app.include_router(telegram_router)
+app.include_router(api_router)

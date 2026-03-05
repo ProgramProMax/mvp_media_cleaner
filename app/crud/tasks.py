@@ -13,12 +13,21 @@ class CRUDTask(CRUDBase[Task, TaskCreate, TaskUpdate]):
         task_id: int,
         status: StatusEnum
     ) -> Task:
-        task: Task = self.get(task_id)
-        task.status = status
+        task: Task = await self.get(session, task_id)
+        task.status = status.value
         session.add(task)
         session.commit()
         session.refresh(task)
         return task
+
+    async def update_by_id(
+        self,
+        session: AsyncSession,
+        task_id: int,
+        obj_in: TaskUpdate
+    ) -> Task:
+        task: Task = await self.get(session, task_id)
+        return await self.update(session, task, obj_in)
 
 
 task_crud = CRUDTask(Task)

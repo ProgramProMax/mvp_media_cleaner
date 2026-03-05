@@ -3,6 +3,7 @@ import asyncio
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.filters import Command, CommandObject
+from aiogram.enums.parse_mode import ParseMode
 
 from app.celery.celery_tasks import process_media_chain
 from app.core.config import settings
@@ -17,8 +18,9 @@ dp = Dispatcher()
 
 
 async def notification_by_task(task_id: int, celery_id: int, timeout: int = 15):
-    while True:
-        print('Обработка...')
+    pass
+    # while True:
+    #    print('Обработка...')
 
 
 async def media_check(message: Message):
@@ -31,24 +33,27 @@ async def media_check(message: Message):
         return
     file = await bot.get_file(message.audio.file_id)
     await message.answer("Файл получен")
+    print(file.file_path, settings.telegram_token)
     file_url = TELEGRAM_FILE_URL_FORMAT.format(
         settings.telegram_token,
         file.file_path
     )
     async with get_async_session() as session:
+        user = await user_crud.get_by_telegram_id(session, message.chat.id)
         taks_obj = TaskCreate(
             original_file_url=file_url,
-            user_id=user_crud.get_by_telegram_id(session, message.chat.id).id
+            user_id=user.id
         )
         task = await task_crud.create(session, taks_obj)
 
-    process_media_chain.delay(
+    result = process_media_chain.delay(
         task_id=task.id,
         file_url=file_url,
         user_id=message.chat.id
     )
-    asyncio.create_task(notification_by_task(task.id))
-    await message.answer(f'Номер задачи: `{task.id}`')
+    print(result.id)
+    asyncio.create_task(notification_by_task(task.id, None))
+    await message.answer(f'Номер задачи: `{task.id}`', parse_mode=ParseMode.MARKDOWN_V2)
 
 
 @dp.message(F.audio)
