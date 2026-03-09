@@ -1,2 +1,2 @@
-from .tasks import Task # noqa
-from .users import User # noqa
+from .tasks import Task  # noqa
+from .users import User  # noqa

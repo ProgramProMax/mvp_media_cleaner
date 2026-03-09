@@ -1,0 +1,16 @@
+[tool.isort]
+line_length = 79
+combine_as_imports = true
+include_trailing_comma = true
+multi_line_output = 3
+sections = [
+  "FUTURE",
+  "STDLIB",
+  "THIRDPARTY",
+  "FIRSTPARTY",
+  "LOCALFOLDER"
+]
+skip_glob=[
+  "tests/*"
+]
+no_lines_before="LOCALFOLDER"

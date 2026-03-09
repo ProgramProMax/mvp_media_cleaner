@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import Column, String, ForeignKey, DateTime, JSON
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 
 from .base import Base
 

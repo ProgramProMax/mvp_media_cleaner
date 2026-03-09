@@ -1,12 +1,12 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response, APIRouter, HTTPException
 from aiogram.types import Update
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 
-from .api.routers import api_router
-from app.bot.bot import dp, set_webhook, delete_webhook, bot
+from app.bot.bot import bot, delete_webhook, dp, set_webhook
 from app.core.config import settings
+from .api.routers import api_router
 
 
 @asynccontextmanager

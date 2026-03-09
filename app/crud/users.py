@@ -1,11 +1,11 @@
 from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import CRUDBase
 from app.models.users import User
-from app.schemas.users import UserUpdate, UserCreate
+from app.schemas.users import UserCreate, UserUpdate
+from .base import CRUDBase
 
 
 class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):

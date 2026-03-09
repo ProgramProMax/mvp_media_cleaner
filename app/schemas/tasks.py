@@ -1,8 +1,10 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl, UUID4
+from pydantic import UUID4, BaseModel, Field, HttpUrl
+
+from .openai import SummaryAudio
 
 
 class TaskBase(BaseModel):
@@ -40,11 +42,15 @@ class TaskInfo(TaskBase):
     created_at: datetime
 
 
-class TaskCeleryData:
-    filename: str | None = Field(None)
-    path: Path | None = Field(None)
-    file_type: str | None = Field(None)
-    file_path: str | None = Field(None)
-    audio_path: str | None = Field(None)
-    trascribe: dict[str, str | dict[str, float | str]]
-    cleaned_text: str = Field(None)
+class TaskCeleryData(BaseModel):
+    filename: Optional[str] = Field(None)
+    path: Optional[Path] = Field(None)
+    file_type: Optional[str] = Field(None)
+    file_path: Optional[str] = Field(None)
+    audio_url: Optional[str] = Field(None)
+    audio_path: Optional[str] = Field(None)
+    cleaned_audio_url: Optional[str] = Field(None)
+    cleaned_audio_path: Optional[str] = Field(None)
+    trascribe: Optional[dict[str, str | dict[str, float | str]]] = Field(None)
+    cleaned_text: Optional[str] = Field(None)
+    summary_json: Optional[SummaryAudio] = Field(None)

@@ -9,10 +9,19 @@ SUPPERTED_FORMATS: tuple[str] = (
     'video/mp4',
     'video/quicktime'
 )
-TELEGRAM_FILE_URL_FORMAT = 'https://api.telegram.org/file/bot{}/{}'
-BASE_DIR = Path(__file__).parent.parent
-MEDIA_URL_FORMAT = 'https://' + settings.host_name + '/media/{}'
-FILTER_WORDS = [
+TELEGRAM_FILE_URL_FORMAT: str = 'https://api.telegram.org/file/bot{}/{}'
+
+FILE_MAX_DURATION: int = 3600
+MAX_FILE_SIZE: int = 200_000_000
+
+
+BASE_DIR: Path = Path(__file__).parent.parent
+MEDIA_URL_FORMAT: str = 'https://' + settings.host_name + '/media/{}'
+FILTER_WORDS: tuple[str] = (
     "эээ", "ммм", "типа", "короче", "значит", "ну", "как бы",
     "uh", "um", "you know", "like", "actually"
-]
+)
+
+OPENAI_MAX_TOKENS: int = 4000
+OPENAI_TIMEOUT: int = 30
+OPENAI_TEMPUTURE: float = 0.3

@@ -1,8 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import CRUDBase
-from app.models.tasks import Task, StatusEnum
+from app.models.tasks import StatusEnum, Task
 from app.schemas.tasks import TaskCreate, TaskUpdate
+from .base import CRUDBase
 
 
 class CRUDTask(CRUDBase[Task, TaskCreate, TaskUpdate]):

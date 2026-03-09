@@ -1,11 +1,12 @@
 from celery import Celery
-from kombu import Queue, Exchange
+from kombu import Exchange, Queue
 from openai import OpenAI
+from celery.signals import task_postrun, task_prerun
 
 from app.core.config import settings
 
-openai = OpenAI(settings.openai_token)
 
+openai = OpenAI(settings.openai_token)
 
 celery_app = Celery(
     "worker",
@@ -41,7 +42,7 @@ celery_app.conf.update(
     },
 )
 
-user_active_tasks = {}
+user_active_tasks: dict[int, int] = {}
 
 
 def check_user_task_limit(user_id, max_concurrent_tasks=2) -> bool:
@@ -50,7 +51,10 @@ def check_user_task_limit(user_id, max_concurrent_tasks=2) -> bool:
     """
     current_tasks = user_active_tasks.get(user_id, 0)
     if current_tasks >= max_concurrent_tasks:
-        raise Exception(f"User {user_id} has reached maximum concurrent tasks limit")
+        raise Exception(
+            f'User {user_id} has reached maximum'
+            ' concurrent tasks limit'
+        )
     user_active_tasks[user_id] = current_tasks + 1
     return True
 

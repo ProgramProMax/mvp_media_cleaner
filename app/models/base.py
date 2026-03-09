@@ -1,8 +1,8 @@
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
 
+from sqlalchemy import UUID, Column, DateTime
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import Column, DateTime, UUID
 
 
 class Base(DeclarativeBase):
