@@ -1,5 +1,7 @@
 import asyncio
 import subprocess
+from datetime import datetime
+from pathlib import Path
 
 import requests
 from celery import chain
@@ -18,7 +20,12 @@ from app.crud.tasks import task_crud
 from app.models.tasks import StatusEnum
 from app.schemas.openai import SummaryAudio
 from app.schemas.tasks import TaskCeleryData, TaskUpdate
-from .celery_app import celery_app, openai, check_user_task_limit, release_user_task
+from .celery_app import (
+    celery_app,
+    notify_user_task_completed,
+    openai,
+    release_user_task,
+)
 
 
 async def update_status(task_id: int, status: StatusEnum) -> None:
@@ -37,7 +44,7 @@ def download_task(
     task_id: int,
     file_url: str,
     user_id: int
-) -> TaskCeleryData:
+) -> dict:
 
     asyncio.run(update_status(task_id, StatusEnum.PROCESSING))
 
@@ -54,19 +61,20 @@ def download_task(
 
     return TaskCeleryData(
         filename=file_name,
-        path=path,
-        file_path=file_path,
+        path=str(path),
+        file_path=str(file_path),
         file_type=file_type
-    )
+    ).model_dump()
 
 
 @celery_app.task(bind=True, name='tasks.extract_audio_task')
 def extract_audio_task(
     self,
-    task_id: int,
-    download_data: TaskCeleryData
-) -> TaskCeleryData:
-
+    download_data: dict,
+    task_id: int
+) -> dict:
+    download_data = TaskCeleryData(**download_data)
+    obj_in = None
     if download_data.file_type in ['mov', 'mp4']:
         output_path = BASE_DIR / 'media' / f'{download_data.filename}.wav'
         command = [
@@ -77,7 +85,7 @@ def extract_audio_task(
             '16000',
             '-ac',
             '1',
-            output_path
+            str(output_path)
         ]
         subprocess.call(command)
         obj_in = TaskUpdate(
@@ -85,22 +93,27 @@ def extract_audio_task(
                 f'{download_data.filename}.wav'
             )
         )
-        download_data.audio_path = output_path
+        download_data.audio_path = str(output_path)
+        download_data.file_path = str(output_path)
+        download_data.path = str(BASE_DIR / '.temp')
     else:
         download_data.audio_url = MEDIA_URL_FORMAT.format(
                 f'{download_data.filename}.{download_data.file_type}'
             )
-        download_data.audio_path = download_data.file_path
-    asyncio.run(task_crud.update_by_id(task_id, obj_in))
-    return download_data
+        download_data.audio_path = str(download_data.file_path)
+    download_data.path = str(BASE_DIR / '.temp')
+    if obj_in:
+        asyncio.run(task_crud.update_by_id(task_id, obj_in))
+    return download_data.model_dump()
 
 
 @celery_app.task(bind=True, name='tasks.transcribe_task')
 def trancribe_task(
     self,
-    task_id: int,
-    data: TaskCeleryData
-) -> TaskCeleryData:
+    data: dict,
+    task_id: int
+) -> dict:
+    data = TaskCeleryData(**data)
     asyncio.run(update_status(task_id, StatusEnum.TRANSCRIBING))
     model = WhisperModel('base', device='cpu')
     segments, _ = model.transcribe(data.file_path)
@@ -120,15 +133,16 @@ def trancribe_task(
 
     result["text"] = result["text"].strip()
     data.trascribe = result
-    return data
+    return data.model_dump()
 
 
 @celery_app.task(bind=True, name='tasks.clean_text_task')
 def clean_text_task(
     self,
-    task_id: int,
-    data: TaskCeleryData
-) -> TaskCeleryData:
+    data: dict,
+    task_id: int
+) -> dict:
+    data = TaskCeleryData(**data)
     asyncio.run(update_status(task_id, StatusEnum.CLEANING))
     response = openai.chat.completions.create(
         model='gpt-4o',
@@ -156,15 +170,16 @@ def clean_text_task(
     )
     data.cleaned_text = response.choices[0].message.content
     asyncio.run(task_crud.update_status())
-    return data
+    return data.model_dump()
 
 
 @celery_app.task(bind=True, name='tasks.summarize_task')
 def summarize_task(
     self,
-    task_id: int,
-    data: TaskCeleryData
-) -> TaskCeleryData:
+    data: dict,
+    task_id: int
+) -> dict:
+    data = TaskCeleryData(**data)
     asyncio.run(update_status(task_id, StatusEnum.CLEANING))
     response = openai.chat.completions.create(
         model='gpt-4o',
@@ -195,15 +210,16 @@ def summarize_task(
         timeout=OPENAI_TIMEOUT,
     )
     data.summary_json = response
-    return data
+    return data.model_dump()
 
 
 @celery_app.task(bind=True, name='tasks.rebuild_audio_task')
 def rebuild_audio_task(
     self,
-    task_id: int,
-    data: TaskCeleryData
-) -> TaskCeleryData:
+    data: dict,
+    task_id: int
+) -> dict:
+    data = TaskCeleryData(**data)
     asyncio.run(update_status(task_id, StatusEnum.BUILDING_AUDIO))
 
     try:
@@ -222,8 +238,11 @@ def rebuild_audio_task(
             # Если нет сегментов после фильтрации,
             # используем оригинальное аудио
             data.cleaned_audio_url = data.audio_url
-            data.cleaned_audio_path = data.audio_path
-            return data
+            data.cleaned_audio_path = str(data.audio_path) if data.audio_path else None
+            data.path = str(BASE_DIR / '.temp')
+            data.audio_path = str(data.audio_path) if data.audio_path else None
+            data.file_path = str(data.file_path) if data.file_path else None
+            return data.model_dump()
 
         # Создаём список команд для ffmpeg для склеивания аудио
         audio_parts = []
@@ -251,12 +270,15 @@ def rebuild_audio_task(
                 '-y'
             ]
             subprocess.run(command, check=True, capture_output=True)
-            audio_parts.append(part_path)
+            audio_parts.append(str(part_path))
 
         if not audio_parts:
             data.cleaned_audio_url = data.audio_url
-            data.cleaned_audio_path = data.audio_path
-            return data
+            data.cleaned_audio_path = str(data.audio_path) if data.audio_path else None
+            data.path = str(BASE_DIR / '.temp')
+            data.audio_path = str(data.audio_path) if data.audio_path else None
+            data.file_path = str(data.file_path) if data.file_path else None
+            return data.model_dump()
 
         # Склеиваем все части через ffmpeg
         output_path = BASE_DIR / 'media' / f'{data.filename}_rebuilt.mp3'
@@ -280,14 +302,17 @@ def rebuild_audio_task(
         subprocess.run(command, check=True, capture_output=True)
 
         for part_path in audio_parts:
-            part_path.unlink(missing_ok=True)
-        list_file.unlink(missing_ok=True)
+            Path(part_path).unlink(missing_ok=True)
+        Path(list_file).unlink(missing_ok=True)
 
         data.cleaned_audio_url = MEDIA_URL_FORMAT.format(
             f'{data.filename}_rebuilt.mp3'
         )
-        data.cleaned_audio_path = output_path
-        return data
+        data.cleaned_audio_path = str(output_path)
+        data.path = str(BASE_DIR / '.temp')
+        data.audio_path = str(data.audio_path) if data.audio_path else None
+        data.file_path = str(data.file_path) if data.file_path else None
+        return data.model_dump()
 
     except subprocess.CalledProcessError as e:
         asyncio.run(task_crud.update_status(task_id, StatusEnum.ERROR))
@@ -297,13 +322,41 @@ def rebuild_audio_task(
 @celery_app.task(bind=True, name='tasks.finalize_task')
 def finalize_task(
     self,
+    data: dict,
     task_id: int,
-    user_id: int,
-    data: TaskCeleryData
-) -> TaskCeleryData:
-    asyncio.run(update_status(task_id, StatusEnum.DONE))
+    user_id: int
+) -> dict:
+    data = TaskCeleryData(**data)
     release_user_task(user_id)
+    obj_in = TaskUpdate(
+        audio_url=data.audio_url,
+        finished_at=datetime.now(),
+        status=StatusEnum.DONE.value,
+        summary_json=data.summary_json.model_dump_json() if hasattr(data.summary_json, 'model_dump_json') else data.summary_json,
+        transcript=data.trascribe,
+        cleanned_audio_url=data.cleaned_audio_url,
+    )
+    asyncio.run(update_task_by_id(task_id, obj_in))
 
+    # Оповещаем пользователя о выполнении задачи
+    # Преобразуем Path в строки для сериализации
+    data_dict = data.model_dump() if isinstance(data, TaskCeleryData) else data
+    if data_dict.get('path'):
+        data_dict['path'] = str(data_dict['path'])
+    if data_dict.get('file_path'):
+        data_dict['file_path'] = str(data_dict['file_path'])
+    if data_dict.get('audio_path'):
+        data_dict['audio_path'] = str(data_dict['audio_path'])
+    if data_dict.get('cleaned_audio_path'):
+        data_dict['cleaned_audio_path'] = str(data_dict['cleaned_audio_path'])
+
+    asyncio.run(
+        notify_user_task_completed(
+            user_id=user_id,
+            task_id=task_id,
+            data=data_dict
+        )
+    )
     return {'status': 'completed'}
 
 
@@ -312,7 +365,7 @@ def process_media_chain(
     self,
     task_id: int,
     file_url: str,
-    user_id: int,
+    user_id: int
 ) -> dict:
     workflow = chain(
         download_task.s(task_id, file_url, user_id) |
@@ -329,5 +382,3 @@ def process_media_chain(
         'chain_id': result.id,
         'status': 'started'
     }
-
-

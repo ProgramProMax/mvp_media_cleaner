@@ -1,12 +1,60 @@
+from aiogram import Bot
 from celery import Celery
 from kombu import Exchange, Queue
 from openai import OpenAI
-from celery.signals import task_postrun, task_prerun
 
 from app.core.config import settings
 
+openai = OpenAI(api_key=settings.openai_token)
 
-openai = OpenAI(settings.openai_token)
+
+async def notify_user_task_completed(
+    user_id: int,
+    task_id: int,
+    data: dict
+) -> None:
+    """
+    Оповещает пользователя о выполнении цепочки задач
+    Args:
+        user_id: ID пользователя в Telegram
+        task_id: ID задачи в базе данных
+        data: Данные из TaskCeleryData с результатами обработки
+    """
+    bot = Bot(token=settings.telegram_token)
+
+    summary = data.get('summary_json', {})
+    if isinstance(summary, str):
+        import json
+        try:
+            summary = json.loads(summary)
+        except json.JSONDecodeError:
+            summary = {}
+
+    short_summary = summary.get('short_summary', 'Краткое резюме отсутствует')
+    bullet_points = summary.get('bullet_points', [])
+
+    message = (
+        f'✅ Задача №{task_id} выполнена!\n\n'
+        f'📋 Краткое резюме:\n'
+        f'{short_summary}\n\n'
+    )
+
+    if bullet_points:
+        message += '📌 Основные моменты:\n'
+        for i, point in enumerate(bullet_points, 1):
+            message += f'{i}. {point}\n'
+
+    message += (
+        f'\n🔊 Оригинальное аудио: {data.get("audio_url", "N/A")}\n'
+        f'🔊 Очищенное аудио: {data.get("cleanned_audio_url", "N/A")}'
+    )
+
+    try:
+        await bot.send_message(chat_id=user_id, text=message)
+    except Exception as e:
+        print(f'Ошибка при отправке уведомления: {e}')
+    finally:
+        await bot.session.close()
 
 celery_app = Celery(
     "worker",

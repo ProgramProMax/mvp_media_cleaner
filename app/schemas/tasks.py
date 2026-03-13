@@ -44,13 +44,13 @@ class TaskInfo(TaskBase):
 
 class TaskCeleryData(BaseModel):
     filename: Optional[str] = Field(None)
-    path: Optional[Path] = Field(None)
+    path: Optional[str] = Field(None)
     file_type: Optional[str] = Field(None)
     file_path: Optional[str] = Field(None)
     audio_url: Optional[str] = Field(None)
     audio_path: Optional[str] = Field(None)
     cleaned_audio_url: Optional[str] = Field(None)
     cleaned_audio_path: Optional[str] = Field(None)
-    trascribe: Optional[dict[str, str | dict[str, float | str]]] = Field(None)
+    trascribe: Optional[dict] = Field(None)
     cleaned_text: Optional[str] = Field(None)
     summary_json: Optional[SummaryAudio] = Field(None)

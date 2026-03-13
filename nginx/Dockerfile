@@ -1,3 +1,3 @@
 FROM nginx:latest
 
-COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY ./nginx/nginx.conf /etc/nginx/templates/default.conf.template

@@ -1,4 +1,5 @@
-from aiogram import Bot, F
+from aiogram import F, Router
+from aiogram.client.bot import Bot
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.filters import Command, CommandObject, ExceptionTypeFilter
 from aiogram.fsm.context import FSMContext
@@ -7,12 +8,18 @@ from aiogram.types import Audio, Document, ErrorEvent, Message, Voice
 from app.celery.celery_app import check_user_task_limit
 from app.celery.celery_tasks import process_media_chain
 from app.core.config import settings
-from app.core.constants import SUPPERTED_FORMATS, TELEGRAM_FILE_URL_FORMAT, MAX_FILE_SIZE, FILE_MAX_DURATION
+from app.core.constants import (
+    FILE_MAX_DURATION,
+    MAX_FILE_SIZE,
+    SUPPERTED_FORMATS,
+    TELEGRAM_FILE_URL_FORMAT,
+)
 from app.core.db import get_async_session
 from app.crud import task_crud, user_crud
 from app.schemas.tasks import TaskCreate
 from app.schemas.users import UserCreate
-from .bot import bot, dp
+
+router = Router()
 
 
 class InvalidMediaFormat(Exception):
@@ -22,10 +29,10 @@ class InvalidMediaFormat(Exception):
         self.message = message
 
 
-@dp.errors(ExceptionTypeFilter(InvalidMediaFormat))
+@router.errors(ExceptionTypeFilter(InvalidMediaFormat))
 async def media_fomat_handler(
     event: ErrorEvent,
-    bot: Bot
+    bot: Router
 ) -> bool:
     await bot.send_message(
         chat_id=event.update.message.chat.id,
@@ -34,16 +41,20 @@ async def media_fomat_handler(
     return True
 
 
-async def media_check(message: Message, file: Audio | Voice | Document):
+async def media_check(
+    message: Message,
+    file: Audio | Voice | Document,
+    bot: Bot
+) -> None:
     '''Обрадотка оправки медиа файла'''
-    if file.duration >= FILE_MAX_DURATION:
-        raise ExceptionTypeFilter(
+    if file.duration and file.duration > FILE_MAX_DURATION:
+        raise InvalidMediaFormat(
             'Отправленное аудио по длительности более часа'
         )
-    if file.mime_type not in SUPPERTED_FORMATS:
-        raise ExceptionTypeFilter('Отправленнoe аудио файл не поддерживается')
-    if file.file_size >= MAX_FILE_SIZE:
-        raise ExceptionTypeFilter('Отправленнoe аудио файл слишком большой')
+    if file.mime_type and file.mime_type not in SUPPERTED_FORMATS:
+        raise InvalidMediaFormat('Отправленное аудио файл не поддерживается')
+    if file.file_size and file.file_size > MAX_FILE_SIZE:
+        raise InvalidMediaFormat('Отправленное аудио файл слишком большой')
 
     file_info = await bot.get_file(file.file_id)
     await message.answer("Файл получен")
@@ -59,6 +70,7 @@ async def media_check(message: Message, file: Audio | Voice | Document):
         )
         task = await task_crud.create(session, taks_obj)
     check_user_task_limit(message.chat.id)
+
     process_media_chain.delay(
         task_id=task.id,
         file_url=file_url,
@@ -70,17 +82,17 @@ async def media_check(message: Message, file: Audio | Voice | Document):
     )
 
 
-@dp.message(F.voice | F.audio | F.doument)
-async def media_handler(message: Message, state: FSMContext):
+@router.message(F.voice | F.audio | F.document)
+async def media_handler(message: Message, state: FSMContext, bot: Bot):
     if message.audio:
-        await media_check(message, message.audio)
+        await media_check(message, message.audio, bot)
     elif message.voice:
-        await media_check(message, message.voice)
+        await media_check(message, message.voice, bot)
     elif message.document:
-        await media_check(message, message.document)
+        await media_check(message, message.document, bot)
 
 
-@dp.message(Command(commands=["help"]))
+@router.message(Command(commands=["help"]))
 async def help_handler(message: Message):
     await message.answer(
         'Описание команд и их работа:\n'
@@ -92,19 +104,20 @@ async def help_handler(message: Message):
     )
 
 
-@dp.message(Command(commands=["status"]))
+@router.message(Command(commands=["status"]))
 async def status_handler(message: Message, command: CommandObject):
-    args = command.args.strip()
-    if not args:
+    print(command.command)
+    print(command.args)
+    if not command.args:
         await message.answer('Введите id задачи или celery task id')
         return
+    args = command.args.strip(' ')
 
     status = None
 
     async with get_async_session() as session:
         db_task = await (
-            task_crud.get(session, int(args))
-            if args.isdigit() else None
+            task_crud.get(session, args)
         )
         if db_task:
             status = db_task.status
@@ -114,12 +127,12 @@ async def status_handler(message: Message, command: CommandObject):
     await message.answer('Задача не найдена')
 
 
-@dp.message(Command(commands=["new"]))
+@router.message(Command(commands=["new"]))
 async def new_handler(message: Message):
     await message.answer("This is a new command handler!")
 
 
-@dp.message(Command(commands=["start"]))
+@router.message(Command(commands=["start"]))
 async def start_handler(message: Message):
     obj_in = UserCreate(
         telegram_id=message.chat.id
