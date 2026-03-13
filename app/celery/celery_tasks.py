@@ -180,7 +180,6 @@ def summarize_task(
     task_id: int
 ) -> dict:
     data = TaskCeleryData(**data)
-    asyncio.run(update_status(task_id, StatusEnum.CLEANING))
     response = openai.chat.completions.create(
         model='gpt-4o',
         temperature=OPENAI_TEMPUTURE,
